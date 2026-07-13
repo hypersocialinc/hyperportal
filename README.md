@@ -4,6 +4,9 @@
 (Claude Code, Codex, Cursor — anything that can run a CLI). You own the code,
 the deployment, and the analytics.
 
+**Website: [hyperportal.dev](https://hyperportal.dev)** — overview, use cases,
+and the waitlist for the hosted version.
+
 Share documents with investors, acquirers, landlords, or lawyers, and know
 exactly what's happening:
 
