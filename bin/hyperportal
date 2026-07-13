@@ -1,0 +1,229 @@
+#!/usr/bin/env node
+/**
+ * hyperportal — scaffold and verify disclosure portals.
+ *
+ *   hyperportal new <name> [--dir <path>] [--json]
+ *   hyperportal doctor [--dir <path>] [--url <prod-url>] [--json]
+ *
+ * `new` stamps a fresh portal from ../template: copies it, names it, git-inits
+ * it, and prints next steps. `doctor` checks a portal working directory for the
+ * mistakes that actually bite (leaky OG setup, tokens in git, malformed
+ * PORTAL_TEAMS) and, with --url, probes the live gate.
+ *
+ * Agent rules this CLI follows (see skills/hyperportal/references/cli-design.md):
+ * non-interactive, hard error on ambiguity, --json on reads, real exit codes.
+ */
+
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const TEMPLATE = join(ROOT, "template");
+
+const argv = process.argv.slice(2);
+const cmd = argv[0];
+const positional = argv.slice(1).filter((a) => !a.startsWith("--"));
+const flag = (name) => {
+  const i = argv.indexOf(`--${name}`);
+  return i === -1 ? undefined : argv[i + 1];
+};
+const JSON_OUT = argv.includes("--json");
+
+function die(msg) {
+  console.error(`\n  ✗ ${msg}\n`);
+  process.exit(1);
+}
+
+function run(command, args, opts = {}) {
+  const r = spawnSync(command, args, { encoding: "utf8", ...opts });
+  if (r.error) die(`could not run \`${command}\`: ${r.error.message}`);
+  return r;
+}
+
+// ─── new ─────────────────────────────────────────────────────────────────────
+
+function cmdNew(name) {
+  if (!name) die('usage: hyperportal new <name> [--dir <path>]');
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name))
+    die(`name must be kebab-case (got ${JSON.stringify(name)}) — it becomes the package name`);
+
+  const dir = resolve(flag("dir") ?? join(process.cwd(), name));
+  if (existsSync(dir) && readdirSync(dir).length > 0)
+    die(`${dir} exists and is not empty — refusing to write into it`);
+  if (!existsSync(TEMPLATE)) die(`template missing at ${TEMPLATE}`);
+
+  mkdirSync(dir, { recursive: true });
+  // Filter on the path RELATIVE to the template: under npx the package itself
+  // lives inside a node_modules dir, so testing the absolute path would reject
+  // every file.
+  const SKIP = new Set(["node_modules", ".next", ".git", ".vercel"]);
+  cpSync(TEMPLATE, dir, {
+    recursive: true,
+    filter: (src) => !relative(TEMPLATE, src).split(sep).some((p) => SKIP.has(p)),
+  });
+
+  // Name the portal: package.json + the branding config's wordmark.
+  const pkgPath = join(dir, "package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  pkg.name = name;
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+
+  const cfgPath = join(dir, "lib", "portal.config.ts");
+  const pretty = name.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+  writeFileSync(cfgPath, readFileSync(cfgPath, "utf8").replace('name: "Portal",', `name: ${JSON.stringify(pretty)},`));
+
+  // Portals deploy from their own repo (push-to-main = production).
+  const gitignore = ["node_modules/", ".next/", ".env*.local", ".vercel/", "*.tsbuildinfo", ".DS_Store", ""].join("\n");
+  writeFileSync(join(dir, ".gitignore"), gitignore);
+  run("git", ["init", "-b", "main"], { cwd: dir });
+  run("git", ["add", "-A"], { cwd: dir });
+  const c = run("git", ["commit", "-q", "-m", `chore: scaffold ${name} from hyperportal template`], { cwd: dir });
+  if (c.status !== 0) die(`git commit failed:\n${c.stderr || c.stdout}`);
+
+  if (JSON_OUT) return console.log(JSON.stringify({ name, dir }));
+  console.log(`
+  ✓ ${pretty} scaffolded at ${dir}
+
+  Next steps:
+    1. cd ${dir} && pnpm install
+    2. Edit lib/portal.config.ts (contact email, production URL)
+       and lib/sections.ts + content/*.mdx for your domain.
+    3. Local dev:
+         PORTAL_TEAMS='[{"token":"dev","org":"Local","active":true}]' pnpm dev
+         open http://localhost:3000/r/dev
+    4. Deploy: create the Vercel project (vercel link), push to main,
+       set PORTAL_URL in .env.local, then grant access:
+         pnpm portal add "First Recipient"
+    5. Verify before sharing:
+         hyperportal doctor --dir ${dir} --url https://<your-portal>
+`);
+}
+
+// ─── doctor ──────────────────────────────────────────────────────────────────
+
+async function cmdDoctor() {
+  const dir = resolve(flag("dir") ?? process.cwd());
+  const url = flag("url")?.replace(/\/$/, "");
+  const checks = [];
+  const check = (name, ok, detail) => checks.push({ name, ok, detail });
+
+  if (!existsSync(join(dir, "lib", "access.ts"))) die(`${dir} does not look like a portal (no lib/access.ts)`);
+
+  // PORTAL_TEAMS, wherever it's set locally, must parse — access.ts fails
+  // closed, so a malformed value locks out every counterparty at once.
+  let teamsRaw = process.env.PORTAL_TEAMS ?? null;
+  const envLocal = join(dir, ".env.local");
+  if (!teamsRaw && existsSync(envLocal)) {
+    const m = readFileSync(envLocal, "utf8").match(/^\s*PORTAL_TEAMS\s*=\s*(.*)$/m);
+    if (m) {
+      teamsRaw = m[1].trim();
+      if ((teamsRaw.startsWith("'") && teamsRaw.endsWith("'")) || (teamsRaw.startsWith('"') && teamsRaw.endsWith('"')))
+        teamsRaw = teamsRaw.slice(1, -1);
+    }
+  }
+  if (teamsRaw !== null) {
+    try {
+      const parsed = JSON.parse(teamsRaw);
+      check("PORTAL_TEAMS parses", Array.isArray(parsed), Array.isArray(parsed) ? `${parsed.length} team(s)` : "not a JSON array");
+    } catch (e) {
+      check("PORTAL_TEAMS parses", false, `malformed JSON (${e.message}) — this fails CLOSED and locks everyone out`);
+    }
+  } else {
+    check("PORTAL_TEAMS parses", true, "not set locally (production value is the one that matters)");
+  }
+
+  // Tokens must never be committed. Look for token-shaped JSON in tracked files.
+  const grep = run("git", ["grep", "-lE", '"token"\\s*:\\s*"[0-9a-f]{16,}"', "--", ".", ":!pnpm-lock.yaml"], { cwd: dir });
+  check("no tokens tracked by git", grep.status !== 0, grep.status === 0 ? `found in: ${grep.stdout.trim()}` : "clean");
+
+  // The OG image is cached by unfurlers outside the gate, permanently. It must
+  // exist (so unfurlers don't fall back to page content) and be static.
+  check("static public/og.png exists", existsSync(join(dir, "public", "og.png")), "unfurlers cache it outside the gate — wordmark only");
+  const ogRoute = ["app/og", "app/opengraph-image.tsx", "app/opengraph-image.ts"].filter((p) => existsSync(join(dir, p)));
+  check("no dynamic OG route", ogRoute.length === 0, ogRoute.length ? `remove ${ogRoute.join(", ")} — a dynamic OG image can leak recipient data into permanent caches` : "clean");
+
+  // Framework pin (a wrong dashboard preset serves nothing).
+  try {
+    const vj = JSON.parse(readFileSync(join(dir, "vercel.json"), "utf8"));
+    check("vercel.json pins framework", vj.framework === "nextjs", `framework: ${JSON.stringify(vj.framework)}`);
+  } catch {
+    check("vercel.json pins framework", false, "missing or malformed vercel.json");
+  }
+
+  // Placeholder branding shipped to production is a smell, not a failure.
+  const cfg = readFileSync(join(dir, "lib", "portal.config.ts"), "utf8");
+  check("branding customized", !cfg.includes("owner@example.com") || !url, cfg.includes("owner@example.com") ? "lib/portal.config.ts still has placeholder contact/url" : "customized");
+
+  if (url) {
+    const probe = async (path, redirect = "manual") => {
+      try { return (await fetch(`${url}${path}`, { redirect, cache: "no-store" })).status; }
+      catch (e) { return `unreachable (${e.message})`; }
+    };
+    const bogus = await probe("/r/__doctor_probe__");
+    check("live gate rejects a bogus token", bogus === 403, `GET /r/__doctor_probe__ → ${bogus} (expected 403)`);
+    const room = await probe("/room");
+    check("live /room is gated", room === 200 || room === 404, `GET /room without a cookie → ${room}`);
+    if (room === 200) {
+      const body = await fetch(`${url}/room`).then((r) => r.text()).catch(() => "");
+      check("live /room shows the locked page", /This room is private/.test(body), "expected the private-room notice without a cookie");
+    }
+    const og = await probe("/og.png", "follow");
+    check("live og.png serves", og === 200, `GET /og.png → ${og}`);
+  }
+
+  const failed = checks.filter((c) => !c.ok);
+  if (JSON_OUT) {
+    console.log(JSON.stringify({ dir, url: url ?? null, ok: failed.length === 0, checks }));
+  } else {
+    console.log();
+    for (const c of checks) console.log(`  ${c.ok ? "✓" : "✗"} ${c.name}${c.detail ? `  — ${c.detail}` : ""}`);
+    console.log(failed.length ? `\n  ${failed.length} check(s) failed.\n` : "\n  All checks passed.\n");
+  }
+  process.exit(failed.length ? 1 : 0);
+}
+
+
+// ─── skill ───────────────────────────────────────────────────────────────────
+
+function cmdSkill() {
+  // Install the bundled Claude skill. Copy, don't symlink: under npx the
+  // package lives in an ephemeral cache that won't survive.
+  const src = join(ROOT, "skills", "hyperportal");
+  if (!existsSync(join(src, "SKILL.md"))) die(`bundled skill missing at ${src}`);
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (!home) die("cannot resolve home directory");
+  const dest = join(home, ".claude", "skills", "hyperportal");
+  mkdirSync(dirname(dest), { recursive: true });
+  // Replace whatever is there (including a symlink from a dev checkout) so
+  // reinstalls are idempotent and never write through a link.
+  rmSync(dest, { recursive: true, force: true });
+  cpSync(src, dest, { recursive: true });
+  if (JSON_OUT) return console.log(JSON.stringify({ installed: dest }));
+  console.log(`
+  ✓ skill installed at ${dest}
+
+  Claude Code picks it up on the next session. It triggers on requests like
+  "build a dataroom", "disclosure portal", or operating an existing portal.
+`);
+}
+
+// ─── argv ────────────────────────────────────────────────────────────────────
+
+const usage = `
+  hyperportal — scaffold and verify disclosure portals
+
+    hyperportal new <name> [--dir <path>] [--json]     stamp a portal from the template
+    hyperportal doctor [--dir <path>] [--url <u>] [--json]   verify a portal
+    hyperportal skill [--json]                         install the Claude skill (~/.claude/skills)
+
+  Per-portal access management lives inside each portal: pnpm portal --help
+`;
+
+switch (cmd) {
+  case "new": cmdNew(positional[0]); break;
+  case "doctor": await cmdDoctor(); break;
+  case "skill": cmdSkill(); break;
+  default: console.log(usage); process.exit(cmd ? 1 : 0);
+}

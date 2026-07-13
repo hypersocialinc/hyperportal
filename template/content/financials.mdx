@@ -1,0 +1,16 @@
+# Financials
+
+This section demonstrates a **tier-2 "teaser" section** (`minTier: 2,
+belowTier: "teaser"`).
+
+A stage-1 recipient sees it in the index as a greyed "on request" row — they
+know it exists and can ask for it, but opening `/room/financials` returns a 404
+until their tier is raised:
+
+```
+pnpm portal set-tier "Org Name" 2
+```
+
+Use this mode for material you *want* to advertise but not yet disclose:
+detailed financial statements in a fundraise, pay stubs in a rental
+application, the full evidence set in a visa petition.

@@ -1,0 +1,38 @@
+{
+  "name": "@hypersocial/hyperportal",
+  "version": "0.1.1",
+  "description": "Open-source dataroom you build and manage with an AI coding agent — one private link per recipient, read tracking, staged disclosure, verified revocation. Next.js + Vercel; ships with a Claude agent skill.",
+  "type": "module",
+  "bin": {
+    "hyperportal": "bin/hyperportal"
+  },
+  "files": [
+    "bin",
+    "template",
+    "skills",
+    "!template/node_modules",
+    "!template/.next",
+    "!template/.env*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hypersocialinc/hyperportal.git"
+  },
+  "keywords": [
+    "dataroom",
+    "data-room",
+    "data-portal",
+    "disclosure",
+    "portal",
+    "nextjs",
+    "vercel",
+    "claude",
+    "agent-skill",
+    "docsend-alternative"
+  ],
+  "author": "Selcuk Atli",
+  "license": "MIT"
+}

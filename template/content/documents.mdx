@@ -1,0 +1,15 @@
+# Documents
+
+The core document set. Every recipient of this portal can read this section
+(`minTier: 1`).
+
+Files registered in `lib/documents.ts` for this section render automatically
+below this text, and download through a gated, signed URL — the document list
+appears once you add entries with:
+
+```
+pnpm docs:add <file> --section documents --title "Certificate of Incorporation"
+```
+
+Downloads are logged per counterparty, so you can see who pulled what and when
+(`pnpm portal stats "Org Name"`).
