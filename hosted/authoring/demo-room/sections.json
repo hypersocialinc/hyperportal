@@ -1,0 +1,38 @@
+[
+  {
+    "slug": "overview",
+    "number": "00",
+    "title": "Overview",
+    "description": "What this room contains and how access works.",
+    "minTier": 1,
+    "belowTier": "teaser",
+    "group": "top"
+  },
+  {
+    "slug": "documents",
+    "number": "01",
+    "title": "Company Documents",
+    "description": "Incorporation, cap table summary, and key agreements.",
+    "minTier": 1,
+    "belowTier": "teaser",
+    "group": "main"
+  },
+  {
+    "slug": "financials",
+    "number": "02",
+    "title": "Financials",
+    "description": "Detailed metrics and model — unlocked at stage 2.",
+    "minTier": 2,
+    "belowTier": "teaser",
+    "group": "main"
+  },
+  {
+    "slug": "sensitive",
+    "number": "03",
+    "title": "Customer Contracts",
+    "description": "Named-customer terms whose existence is itself sensitive.",
+    "minTier": 2,
+    "belowTier": "hidden",
+    "group": "main"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "name": "Acme",
+  "label": "Series A Data Room",
+  "confidentiality": "Confidential",
+  "contactEmail": "founders@acme.example",
+  "url": "http://localhost:3000"
+}

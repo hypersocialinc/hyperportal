@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --accent: #4f46e5;
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: #ffffff;
+  color: #18181b;
+}
+
+.dark body {
+  background: #09090b;
+  color: #fafafa;
+}

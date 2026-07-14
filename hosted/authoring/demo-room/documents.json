@@ -1,0 +1,11 @@
+[
+  {
+    "docId": "acme-sample",
+    "section": "documents",
+    "title": "Sample Document (Confidential)",
+    "filename": "sample.txt",
+    "contentType": "text/plain",
+    "size": "1 KB",
+    "date": "2026-07-01"
+  }
+]

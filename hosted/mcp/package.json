@@ -1,0 +1,21 @@
+{
+  "name": "@hypersocial/hyperportal-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "hyperportal-mcp": "dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "convex": "^1.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

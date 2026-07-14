@@ -1,0 +1,7 @@
+ACME, INC. — SAMPLE DOCUMENT (CONFIDENTIAL)
+
+This file is served through hyperportal's gated document route. It lives in
+private storage; the URL you fetched it from is minted server-side per request
+and is never exposed to the browser. Your download was attributed to your firm.
+
+Replace this with a real document via documents.json + files/.
